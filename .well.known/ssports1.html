@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="origin">
+    <title>PLAYER</title>
+    
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        video {
+            object-fit: fill !important;
+        }
+
+        #player-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 0;
+            background: #000;
+        }
+
+        .control-button {
+            position: fixed;
+            z-index: 9999;
+            cursor: pointer;
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+        
+
+        [data-advertisement] {
+            bottom: 25%;
+            position: absolute;
+            right: 0;
+            z-index: 9999;
+        }
+
+        [data-advertisement] button {
+            background-color: #000;
+            border: 3px solid #333;
+            border-right: 0;
+            color: #f8f8f8;
+            font-family: "Roboto";
+            font-weight: bold;
+            font-size: 68%;
+            padding: 10px 20px;
+        }
+
+        [data-advertisement-link] {
+            height: 100%;
+            left: 0;
+            position: absolute;
+            top: 0;
+            z-index: 9998;
+            width: 100%;
+        }
+
+        [data-free-banner] {
+            position: absolute;
+            left: 50%;
+            bottom: 15px;
+            transform: translateX(-50%);
+            width: 50%;
+            z-index: 99999;
+            text-align: center;
+        }
+
+        [data-free-banner] img {
+            width: 100%;
+            max-width: 468px;
+        }
+
+        [data-f-cl] {
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        [data-free-close] {
+            color: #fff;
+            text-decoration: none;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .fullscreen [data-free-banner] img {
+            max-width: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div id="player-container"></div>
+
+    <script type="text/javascript" src="jquery.min.js"></script>
+    <script type="text/javascript" src="clappr.min.js"></script>
+
+    <script>
+        class StreamPlayer {
+            constructor() {
+                this.baseStreamUrl = 'https://zekonew.newkso.ru/zeko/premium67';
+                
+                const hashParams = this.parseHashParams(window.location.hash);
+                this.urlConfig = {
+                    poster: decodeURIComponent(hashParams.poster || ''),
+                    reklamResim: decodeURIComponent(hashParams.reklamResim || ''),
+                    reklamGidis: decodeURIComponent(hashParams.reklamGidis || '')
+                };
+                
+                this.config = {
+                    stream: {
+                        baseUrl: this.baseStreamUrl,
+                        defaultSource: null
+                    },
+                    ads: {
+                        enabled: true,
+                        skipOffset: 6,
+                        providers: this.decodeAdsConfig("eyJeaHR0cHM/Oi8vKHd3dy4pP3NlbGN1a3Nwb3J0c2hkXFxkKi54eXouKiI6eyJlbmFibGVkIjp0cnVlLCJsaW5rIjoiaHR0cHM6Ly9zaG9ydGJhbC5vbmxpbmUvc2VsY3Vrc3BvcnRoZCIsInNvdXJjZSI6Imh0dHBzOi8vdmlkZW8udHdpbWcuY29tL2V4dF90d192aWRlby8xODIyMjIxMDMzMjE2MTIyODgwL3B1L3BsL3RGNWdEanVoWk8yeFVVaGgubTN1OD92YXJpYW50X3ZlcnNpb249MSZ0YWc9MTIifSwiXmh0dHBzPzovLyh3d3cuKT9zcG9yY2FmZVxcZCoueHl6LioiOnsiZW5hYmxlZCI6dHJ1ZSwibGluayI6Imh0dHBzOi8vdDJtLmlvL0FzdXNzcG9ydHMiLCJzb3VyY2UiOiJiZXRhc3VzcHJlL3BsYXlsaXN0Lm0zdTgifX0=")
+                    },
+                    banner: {
+                        enabled: true,
+                        image: this.urlConfig.reklamResim,
+                        link: this.urlConfig.reklamGidis
+                    }
+                };
+
+                this.config.stream.defaultSource = this.getStreamSource();
+
+                this.skipTimer = null;
+                this.skipOffset = this.config.ads.skipOffset;
+                this.elapsedTime = 0;
+                this.adSkipped = false;
+                this.bannerInitialized = false;
+                
+                this.initPlayer();
+                this.initTracking();
+                this.player.attachTo(document.getElementById('player-container'));
+            }
+
+            decodeAdsConfig(encodedConfig) {
+                return JSON.parse(window.atob(encodedConfig));
+            }
+
+            static setCookie(name, value, hours) {
+                const date = new Date();
+                date.setTime(date.getTime() + (hours * 60 * 60 * 1000));
+                document.cookie = `${name}=${value};expires=${date.toUTCString()};path=/`;
+            }
+
+            static getCookie(name) {
+                return document.cookie.split('; ')
+                    .find(row => row.startsWith(`${name}=`))
+                    ?.split('=')[1];
+            }
+
+            initPlayer() {
+                this.player = new Clappr.Player({
+                    autoPlay: true,
+                    disableVideoTagContextMenu: true,
+                    height: '100%',
+                    width: '100%',
+                    poster: this.urlConfig.poster,
+                    hlsjsConfig: {
+                        liveSyncDurationCount: 4,
+                        maxMaxBufferLength: 30
+                    },
+                    playback: {
+                        playInline: true,
+                        controls: false
+                    },
+                    language: 'tr',
+                    strings: {
+                        tr: {
+                            "live": "canlı",
+                            "default_error_message": "Yayında sorun var.",
+                            "default_error_title": "Dikkat!",
+                            "playback_not_supported": "Tarayıcınız bu videoyu oynatma desteğine sahip değil. Lütfen diğer bir tarayıcı deneyiniz."
+                        }
+                    }
+                });
+                this.setupPlayerEvents();
+            }
+
+            parseHashParams(hash) {
+                if (!hash || hash === '#') return {};
+                
+                const params = {};
+                const hashString = hash.substring(1);
+                
+                hashString.split('&').forEach(param => {
+                    const [key, value] = param.split('=');
+                    if (key && value) {
+                        params[key] = value;
+                    }
+                });
+                
+                return params;
+            }
+           
+            getStreamSource() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const streamId = urlParams.get('id') || '';
+                return `${this.baseStreamUrl}${streamId}/mono.m3u8`;
+            }
+
+            setupPlayerEvents() {
+                this.player.on(Clappr.Events.PLAYER_READY, () => {
+                    let adSource = this.selectAdSource();
+                    if (!adSource.includes('://')) {
+                        adSource = `${this.baseStreamUrl}${adSource}`;
+                    }
+                    const shouldPlayAd = this.config.ads.enabled && !this.adSkipped && adSource !== this.config.stream.defaultSource;
+
+                    if (shouldPlayAd) {
+                        this.player.configure({ source: adSource });
+                        this.initSkipButton();
+                        
+                        this.player.core.activePlayback.on(Clappr.Events.PLAYBACK_ENDED, () => {
+                            this.skipAd();
+                        });
+
+                        this.player.core.activePlayback.on(Clappr.Events.PLAYBACK_ERROR, () => {
+                            this.skipAd();
+                        });
+                    } else {
+                        this.player.configure({ source: this.config.stream.defaultSource });
+                        if (!this.bannerInitialized) {
+                            this.initBanner();
+                            this.bannerInitialized = true;
+                        }
+                    }
+                });
+
+                this.player.on(Clappr.Events.PLAYER_ERROR, () => {
+                    this.handlePlaybackError();
+                });
+            }
+
+            selectAdSource() {
+                const referrer = document.referrer;
+                const provider = Object.entries(this.config.ads.providers).find(([pattern]) => {
+                    const result = new RegExp(pattern).test(referrer);
+                    return result;
+                });
+                
+                return provider?.[1].source || this.config.stream.defaultSource;
+            }
+
+            initControls() {
+            }
+
+            initTracking() {
+                setInterval(() => {
+                    new Image().src = `https://whos.amung.us/swidget/14wj749nro.png?${Math.random()}`;
+                }, 120000);
+            }
+
+            handlePlaybackError() {
+                console.error('Playback error detected');
+                setTimeout(() => location.reload(), 5000);
+            }
+
+            initSkipButton() {
+                const skipButton = $('<div data-advertisement />');
+                const skipText = $('<button type="button" />').text(`REKLAMI GEÇMEK İÇİN ${this.skipOffset} SANİYE KALDI`);
+                skipButton.append(skipText);
+                
+                const adLink = $('<div data-advertisement-link />');
+                const link = $('<a />').attr({
+                    href: Object.entries(this.config.ads.providers).find(([pattern]) => 
+                        new RegExp(pattern).test(document.referrer)
+                    )?.[1]?.link || '#',
+                    target: '_blank'
+                }).css({
+                    display: 'inline-block',
+                    height: '100%',
+                    width: '100%',
+                    pointerEvents: 'none'
+                });
+                adLink.append(link);
+
+                skipButton.hide();
+                adLink.hide();
+                $('body').prepend(skipButton, adLink);
+
+                this.player.core.activePlayback.once(Clappr.Events.PLAYBACK_PLAY, () => {
+                    skipButton.show();
+                    adLink.show();
+                    link.css('pointerEvents', 'auto');
+                    
+                    this.skipTimer = setInterval(() => {
+                        this.elapsedTime++;
+                        if (this.elapsedTime >= this.skipOffset) {
+                            skipText.text('REKLAMI GEÇ').css('cursor', 'pointer');
+                            skipText.on('click', () => this.skipAd());
+                            clearInterval(this.skipTimer);
+                        } else {
+                            skipText.text(`REKLAMI GEÇMEK İÇİN ${this.skipOffset - this.elapsedTime} SANİYE KALDI`);
+                        }
+                    }, 1000);
+                });
+            }
+
+            skipAd() {
+                $('[data-advertisement], [data-advertisement-link]').remove();
+                this.adSkipped = true;
+                this.player.configure({
+                    source: this.config.stream.defaultSource
+                });
+                
+                if (!this.bannerInitialized) {
+                    this.initBanner();
+                    this.bannerInitialized = true;
+                }
+            }
+
+            initBanner() {
+                if (!this.config.banner.enabled) return;
+                
+                if (!this.config.banner.image || !this.config.banner.link) return;
+
+                const bannerHtml = `
+                    <div data-free-banner>
+                        <div data-f-cl>
+                            <a data-free-close href="javascript:void(0)">&times;</a>
+                        </div>
+						<a href="#"><img src="./ata.jpg" alt="Örnek Resim" /></a>
+                        <a href="${this.config.banner.link}" target="_blank">
+                            <img src="${this.config.banner.image}" alt="">
+                        </a>
+                    </div>
+                `;
+
+                $('#player-container .container').prepend(bannerHtml);
+
+                $('[data-free-close]').on('click', (e) => {
+                    e.preventDefault();
+                    $('[data-free-banner]').hide();
+                    return false;
+                });
+            }
+        }
+
+        $(document).ready(() => {
+            new StreamPlayer();
+        });
+    </script>
+</body>
+</html>
